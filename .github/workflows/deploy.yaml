@@ -39,9 +39,12 @@ jobs:
       run: |
         gcloud auth configure-docker $REGION-docker.pkg.dev
 
-    - name: Build and push Docker image
+    - name: Build Docker image
       run: |
         docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA ./api
+
+    - name: Push Docker image to Artifact Registry
+      run: |
         docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA
 
     - name: Get GKE credentials
