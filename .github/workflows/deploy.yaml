@@ -49,7 +49,7 @@ jobs:
 
     - name: Update Kubernetes deployment
       run: |
-        kubectl set image deployment/time-api time-api=$DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA -n time-api
+        kubectl set image deployment/time-api time-api=$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA -n time-api
         kubectl rollout status deployment/time-api -n time-api
 
     - name: Test API
