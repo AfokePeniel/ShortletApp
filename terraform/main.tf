@@ -1,3 +1,18 @@
+# Enable required APIs
+resource "google_project_service" "artifact_registry" {
+  project = var.project_id
+  service = "artifactregistry.googleapis.com"
+
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "container" {
+  project = var.project_id
+  service = "container.googleapis.com"
+
+  disable_on_destroy = false
+}
+
 # VPC Network
 resource "google_compute_network" "vpc" {
   name                    = "time-api-vpc"
@@ -80,6 +95,12 @@ resource "google_container_cluster" "primary" {
       display_name = "All"
     }
   }
+  
+  depends_on = [
+    google_project_service.artifact_registry,
+    google_project_service.container
+  ]
+
 }
 
 resource "google_container_node_pool" "primary_nodes" {
