@@ -8,9 +8,9 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: time-api-cluster
   GKE_ZONE: us-central1
+  REGION: us-central1
+  REPO_NAME: time-api-repo
   IMAGE: time-api
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPO }}
 
 jobs:
   deploy:
@@ -18,26 +18,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
+    - name: Checkout code
       uses: actions/checkout@v2
 
-    #- name: Setup Google Cloud CLI
-     # uses: google-github-actions/setup-gcloud@v0.2.0
-     # with:
-        #service_account_key: ${{ secrets.GCP_SA_KEY }}
-        #project_id: ${{ secrets.GCP_PROJECT_ID }}
-
-    - name: Login to Docker Hub
-      uses: docker/login-action@v1
+    - name: Setup Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v0.2.0
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Build Docker image
-      run: docker build -t $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA api/
+    - name: Create Artifact Registry Repository
+      run: |
+        gcloud artifacts repositories create $REPO_NAME \
+          --repository-format=docker \
+          --location=$REGION \
+          --description="Docker repository for Time API" \
+          || echo "Repository may already exist, continuing..."
 
-    - name: Push Docker image
-      run: docker push $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker $REGION-docker.pkg.dev
+
+    - name: Build and push Docker image
+      run: |
+        docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA ./api
+        docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA
 
     - name: Get GKE credentials
       run: gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE
