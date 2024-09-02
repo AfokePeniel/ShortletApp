@@ -26,7 +26,11 @@ jobs:
       with:
         service_account_key: ${{ secrets.GCP_SA_KEY }}
         project_id: ${{ secrets.GCP_PROJECT_ID }}
-    
+
+    - name: Enable necessary APIs
+      run: |
+        gcloud services enable cloudresourcemanager.googleapis.com
+        gcloud services enable artifactregistry.googleapis.com
 
     - name: Add Artifact Registry Admin role
       run: |
