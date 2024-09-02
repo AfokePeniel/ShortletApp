@@ -9,8 +9,6 @@ env:
   GKE_CLUSTER: time-api-cluster
   GKE_ZONE: us-central1
   IMAGE: time-api
-  REGION: us-central1
-  SERVICE_ACCOUNT: ${{ secrets.GCP_SA_EMAIL }}
 
 jobs:
   deploy:
@@ -27,30 +25,14 @@ jobs:
         service_account_key: ${{ secrets.GCP_SA_KEY }}
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Add Artifact Registry Admin role
-      run: |
-        gcloud projects add-iam-policy-binding $PROJECT_ID \
-          --member="serviceAccount:$SERVICE_ACCOUNT" \
-          --role="roles/artifactregistry.admin"
-        
-    - name: Create Artifact Registry Repository
-      run: |
-        gcloud artifacts repositories create $IMAGE \
-          --project=$PROJECT_ID \
-          --repository-format=docker \
-          --location=$REGION \
-          --description="Docker repository for $IMAGE" \
-          || echo "Repository may already exist, continuing..."
-        
-    - name: Configure Docker for Artifact Registry
-      run: |
-        gcloud auth configure-docker $REGION-docker.pkg.dev
+    - name: Configure Docker
+      run: gcloud auth configure-docker
 
     - name: Build Docker image
-      run: docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE/$IMAGE:$GITHUB_SHA api/
+      run: docker build -t gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA api/
 
     - name: Push Docker image
-      run: docker push $REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE/$IMAGE:$GITHUB_SHA
+      run: docker push gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v1
@@ -60,7 +42,7 @@ jobs:
       working-directory: ./terraform
 
     - name: Terraform Plan
-      run: terraform plan -var="project_id=$PROJECT_ID" 
+      run: terraform plan -var="project_id=$PROJECT_ID"
       working-directory: ./terraform
 
     - name: Terraform Apply
@@ -72,9 +54,8 @@ jobs:
 
     - name: Update Kubernetes deployment
       run: |
-        kubectl set image deployment/time-api time-api=$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE/$IMAGE:$GITHUB_SHA -n time-api
+        kubectl set image deployment/time-api time-api=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA -n time-api
         kubectl rollout status deployment/time-api -n time-api
-
     - name: Test API
       run: |
         EXTERNAL_IP=$(kubectl get service time-api-service -n time-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
