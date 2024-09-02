@@ -13,6 +13,13 @@ resource "google_project_service" "container" {
   disable_on_destroy = false
 }
 
+# Grant Artifact Registry Writer role to the service account
+resource "google_project_iam_member" "artifact_registry_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${var.terraform_service_account}"
+}
+
 # VPC Network
 resource "google_compute_network" "vpc" {
   name                    = "time-api-vpc"
@@ -95,7 +102,7 @@ resource "google_container_cluster" "primary" {
       display_name = "All"
     }
   }
-  
+
   depends_on = [
     google_project_service.artifact_registry,
     google_project_service.container

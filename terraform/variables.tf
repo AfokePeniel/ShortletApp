@@ -8,3 +8,8 @@ variable "region" {
   type        = string
   default     = "us-central1"
 }
+
+variable "terraform_service_account" {
+  description = "The service account email used by Terraform"
+  type        = string
+}
