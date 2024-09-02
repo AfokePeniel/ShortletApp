@@ -11,6 +11,7 @@ env:
   REGION: us-central1
   REPO_NAME: time-api-repo
   IMAGE: time-api
+  SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SA_EMAIL }}
 
 jobs:
   deploy:
@@ -38,6 +39,12 @@ jobs:
     - name: Configure Docker for Artifact Registry
       run: |
         gcloud auth configure-docker $REGION-docker.pkg.dev
+    
+    - name: Grant Artifact Registry Writer role
+      run: |
+        gcloud projects add-iam-policy-binding $PROJECT_ID \
+          --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+          --role="roles/artifactregistry.writer"
 
     - name: Build Docker image
       run: |
