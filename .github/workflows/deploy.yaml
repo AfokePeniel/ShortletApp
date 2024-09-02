@@ -8,10 +8,8 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: time-api-cluster
   GKE_ZONE: us-central1
-  REGION: us-central1
-  REPO_NAME: time-api-repo
-  IMAGE: time-api
-  SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SA_EMAIL }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPO }}
 
 jobs:
   deploy:
@@ -22,44 +20,32 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build Docker image
+      run: |
+        docker build -t $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA ./api
+
+    - name: Push Docker image to Docker Hub
+      run: |
+        docker push $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA
+
     - name: Setup Google Cloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
       with:
         service_account_key: ${{ secrets.GCP_SA_KEY }}
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Create Artifact Registry Repository
-      run: |
-        gcloud artifacts repositories create $REPO_NAME \
-          --repository-format=docker \
-          --location=$REGION \
-          --description="Docker repository for Time API" \
-          || echo "Repository may already exist, continuing..."
-
-    - name: Configure Docker for Artifact Registry
-      run: |
-        gcloud auth configure-docker $REGION-docker.pkg.dev
-    
-    - name: Grant Artifact Registry Writer role
-      run: |
-        gcloud projects add-iam-policy-binding $PROJECT_ID \
-          --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
-          --role="roles/artifactregistry.writer"
-
-    - name: Build Docker image
-      run: |
-        docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA ./api
-
-    - name: Push Docker image to Artifact Registry
-      run: |
-        docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA
-
     - name: Get GKE credentials
       run: gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE
 
     - name: Update Kubernetes deployment
       run: |
-        kubectl set image deployment/time-api time-api=$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE:$GITHUB_SHA -n time-api
+        kubectl set image deployment/time-api time-api=$DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA -n time-api
         kubectl rollout status deployment/time-api -n time-api
 
     - name: Test API
