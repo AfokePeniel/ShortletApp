@@ -105,27 +105,32 @@ jobs:
         else
           echo "Subnet time-api-subnet already exists"
         fi
-    # Create GKE cluster
-    - name: Create GKE cluster
+    # Check if GKE cluster exists, create if it doesn't
+    - name: Check and Create GKE cluster
       run: |
         SERVICE_ACCOUNT="trf-gcp@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-        echo "Creating GKE cluster with service account: ${SERVICE_ACCOUNT}"
-        gcloud container clusters create ${{ env.GKE_CLUSTER }} \
-          --project ${{ secrets.GCP_PROJECT_ID }} \
-          --zone ${{ env.GKE_ZONE }} \
-          --num-nodes 1 \
-          --machine-type e2-medium \
-          --network time-api-vpc \
-          --subnetwork time-api-subnet \
-          --enable-ip-alias \
-          --enable-autoscaling \
-          --min-nodes 1 \
-          --max-nodes 3 \
-          --no-enable-master-authorized-networks \
-          --addons HorizontalPodAutoscaling,HttpLoadBalancing \
-          --enable-autoupgrade \
-          --enable-autorepair \
-          --service-account="${SERVICE_ACCOUNT}" || (echo "Failed to create GKE cluster" && exit 1)
+        echo "Checking for existing GKE cluster: ${{ env.GKE_CLUSTER }}"
+        if gcloud container clusters describe ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }} &>/dev/null; then
+          echo "Cluster ${{ env.GKE_CLUSTER }} already exists"
+        else
+          echo "Creating GKE cluster with service account: ${SERVICE_ACCOUNT}"
+          gcloud container clusters create ${{ env.GKE_CLUSTER }} \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --zone ${{ env.GKE_ZONE }} \
+            --num-nodes 1 \
+            --machine-type e2-medium \
+            --network time-api-vpc \
+            --subnetwork time-api-subnet \
+            --enable-ip-alias \
+            --enable-autoscaling \
+            --min-nodes 1 \
+            --max-nodes 3 \
+            --no-enable-master-authorized-networks \
+            --addons HorizontalPodAutoscaling,HttpLoadBalancing \
+            --enable-autoupgrade \
+            --enable-autorepair \
+            --service-account="${SERVICE_ACCOUNT}" || (echo "Failed to create GKE cluster" && exit 1)
+        fi
     # Verify the service account
     - name: Verify service account
       run: |
