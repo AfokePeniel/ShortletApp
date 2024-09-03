@@ -69,11 +69,41 @@ jobs:
         gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
           --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
           --role="roles/iam.serviceAccountUser"
+    # Create GKE cluster
+    - name: Create GKE cluster
+      run: |
+        gcloud container clusters create ${{ env.GKE_CLUSTER }} \
+          --zone ${{ env.GKE_ZONE }} \
+          --num-nodes 1 \
+          --machine-type e2-medium \
+          --network time-api-vpc \
+          --subnetwork time-api-subnet \
+          --enable-ip-alias \
+          --enable-autoscaling \
+          --min-nodes 1 \
+          --max-nodes 3 \
+          --no-enable-master-authorized-networks \
+          --addons HorizontalPodAutoscaling,HttpLoadBalancing \
+          --enable-autoupgrade \
+          --enable-autorepair
 
+    # Wait for the cluster to be ready
+    - name: Wait for cluster to be ready
+      run: |
+        echo "Waiting for cluster to be ready..."
+        while [[ $(gcloud container clusters list --filter="name=${{ env.GKE_CLUSTER }}" --format="value(status)") != "RUNNING" ]]; do
+          sleep 10
+        done
+        echo "Cluster is ready!"
     # Get the GKE credentials so we can deploy to the cluster
     - name: Set up GKE credentials
       run: |
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
+
+    # Create namespace if it doesn't exist
+    - name: Create namespace
+      run: |
+        kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
 
     # Deploy the Docker image to the GKE cluster
     - name: Deploy
