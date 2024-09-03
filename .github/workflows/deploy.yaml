@@ -9,6 +9,7 @@ env:
   GKE_ZONE: us-central1
   DEPLOYMENT_NAME: time-api
   IMAGE: time-api
+  USE_GKE_GCLOUD_AUTH_PLUGIN: True
 
 jobs:
   setup-build-publish-deploy:
@@ -31,6 +32,15 @@ jobs:
 
     - name: 'Use gcloud CLI'
       run: 'gcloud info'
+
+    # Install gke-gcloud-auth-plugin
+    - name: Install gke-gcloud-auth-plugin
+      run: |
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+        sudo apt-get update
+        sudo apt-get install google-cloud-sdk-gke-gcloud-auth-plugin
+        echo "export USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
 
     # Configure Docker to use the gcloud command-line tool as a credential helper
     - name: Configure Docker
@@ -124,6 +134,7 @@ jobs:
     - name: Set up GKE credentials
       run: |
         gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
+        kubectl config view
 
     # Create namespace if it doesn't exist
     - name: Create namespace
