@@ -61,6 +61,35 @@ This project deploys a simple Time API to Google Kubernetes Engine (GKE) using T
    curl http://<EXTERNAL-IP>
    ```
 
+## Infrastructure
+
+The following GCP resources are created and managed by Terraform:
+
+- VPC and Subnet
+- NAT Gateway
+- GKE Cluster
+- IAM Roles and Policies
+- Firewall Rules
+- Kubernetes Resources (Namespace, Deployment, Service, Ingress)
+
+All infrastructure is defined in the `terraform` directory and is applied as part of the CI/CD pipeline.
+
+## Security
+
+- A NAT gateway is used to manage outbound traffic from the GKE cluster.
+- Firewall rules are implemented to secure the infrastructure.
+- IAM roles are restricted to the principle of least privilege.
+- Terraform Policy as Code (PaC) is implemented to enforce security policies.
+
+## CI/CD Pipeline
+
+The GitHub Actions workflow (.github/workflows/ci-cd.yaml) performs the following steps:
+
+1. Runs Terraform to provision all required infrastructure
+2. Builds the Docker image for the API
+3. Deploys the API to the GKE cluster using Terraform
+4. Verifies the API accessibility
+
 ## Cleanup
 
 To avoid unnecessary charges, remember to destroy the resources when you're done:
