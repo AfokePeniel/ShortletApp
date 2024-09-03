@@ -83,18 +83,28 @@ jobs:
         gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
           --member="serviceAccount:${SERVICE_ACCOUNT}" \
           --role="roles/compute.networkAdmin"
-    # Create VPC and Subnet
+    # Create VPC and Subnet if they don't exist
     - name: Create VPC and Subnet
       run: |
-        # Create VPC
-        gcloud compute networks create time-api-vpc --project=${{ secrets.GCP_PROJECT_ID }} --subnet-mode=custom
-
-        # Create Subnet
-        gcloud compute networks subnets create time-api-subnet \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --region=${{ env.GKE_ZONE }} \
-          --network=time-api-vpc \
-          --range=10.0.0.0/24
+        # Check if VPC exists, create if it doesn't
+        if ! gcloud compute networks describe time-api-vpc --project=${{ secrets.GCP_PROJECT_ID }} &>/dev/null; then
+          echo "Creating VPC: time-api-vpc"
+          gcloud compute networks create time-api-vpc --project=${{ secrets.GCP_PROJECT_ID }} --subnet-mode=custom
+        else
+          echo "VPC time-api-vpc already exists"
+        fi
+        
+        # Check if subnet exists, create if it doesn't
+        if ! gcloud compute networks subnets describe time-api-subnet --project=${{ secrets.GCP_PROJECT_ID }} --region=${{ env.GKE_ZONE }} &>/dev/null; then
+          echo "Creating Subnet: time-api-subnet"
+          gcloud compute networks subnets create time-api-subnet \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --region=${{ env.GKE_ZONE }} \
+            --network=time-api-vpc \
+            --range=10.0.0.0/24
+        else
+          echo "Subnet time-api-subnet already exists"
+        fi
     # Create GKE cluster
     - name: Create GKE cluster
       run: |
