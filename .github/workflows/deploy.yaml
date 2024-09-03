@@ -156,29 +156,47 @@ jobs:
       run: |
         kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
 
-    # Deploy the Docker image to the GKE cluster
-    - name: Deploy
+    # Deploy the Docker image to the GKE cluster and create/update service
+    - name: Deploy and Expose
       run: |
         echo "Current context:"
         kubectl config current-context
         
         echo "Checking if namespace exists:"
-        kubectl get namespace time-api || kubectl create namespace time-api
+        kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
         
-        echo "Checking if deployment exists:"
-        if kubectl get deployment $DEPLOYMENT_NAME -n time-api; then
-          echo "Updating existing deployment"
-          kubectl set image deployment/$DEPLOYMENT_NAME $DEPLOYMENT_NAME=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api
-        else
-          echo "Creating new deployment"
-          kubectl create deployment $DEPLOYMENT_NAME --image=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api
-        fi
+        echo "Deploying/Updating deployment:"
+        kubectl create deployment $DEPLOYMENT_NAME --image=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api --dry-run=client -o yaml | kubectl apply -f -
+        
+        echo "Updating deployment image:"
+        kubectl set image deployment/$DEPLOYMENT_NAME $DEPLOYMENT_NAME=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api
         
         echo "Waiting for deployment to roll out:"
         kubectl rollout status deployment/$DEPLOYMENT_NAME -n time-api --timeout=5m
         
+        echo "Creating/Updating service:"
+        kubectl expose deployment $DEPLOYMENT_NAME --type=LoadBalancer --port=80 --target-port=8080 -n time-api --dry-run=client -o yaml | kubectl apply -f -
+        
+        echo "Waiting for service to get external IP:"
+        for i in {1..30}; do
+          EXTERNAL_IP=$(kubectl get service $DEPLOYMENT_NAME -n time-api --template="{{range .status.loadBalancer.ingress}}{{.ip}}{{end}}")
+          if [ -n "$EXTERNAL_IP" ]; then
+            echo "Service $DEPLOYMENT_NAME is now accessible at $EXTERNAL_IP"
+            break
+          fi
+          if [ $i -eq 30 ]; then
+            echo "Timeout waiting for external IP"
+            exit 1
+          fi
+          echo "Waiting for external IP... (Attempt $i/30)"
+          sleep 10
+        done
+        
         echo "Deployment status:"
         kubectl get deployment $DEPLOYMENT_NAME -n time-api -o wide
+        
+        echo "Service status:"
+        kubectl get service $DEPLOYMENT_NAME -n time-api -o wide
         
         echo "Pod status:"
         kubectl get pods -n time-api -l app=$DEPLOYMENT_NAME
@@ -189,11 +207,16 @@ jobs:
     # Test the deployed application
     - name: Test API
       run: |
-        EXTERNAL_IP=$(kubectl get service time-api-service -n time-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        EXTERNAL_IP=$(kubectl get service $DEPLOYMENT_NAME -n time-api --template="{{range .status.loadBalancer.ingress}}{{.ip}}{{end}}")
+        if [ -z "$EXTERNAL_IP" ]; then
+          echo "Failed to get external IP"
+          exit 1
+        fi
+        echo "Testing API at http://$EXTERNAL_IP"
         response=$(curl -s -o /dev/null -w "%{http_code}" http://$EXTERNAL_IP)
         if [ $response = "200" ]; then
           echo "API is accessible"
         else
-          echo "API is not accessible"
+          echo "API is not accessible, got HTTP response code: $response"
           exit 1
         fi
