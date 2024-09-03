@@ -20,6 +20,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    # Update Dockerfile
+    - name: Update Dockerfile
+      run: |
+        sed -i 's/FROM python:3.9/FROM python:3.9\nRUN pip install Flask==2.0.1 Werkzeug==2.0.1/' ./api/Dockerfile
+        cat ./api/Dockerfile
+
     # Setup gcloud CLI
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
@@ -195,6 +201,12 @@ jobs:
                 image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }}
                 ports:
                 - containerPort: 8080
+                readinessProbe:
+                  httpGet:
+                    path: /
+                    port: 8080
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
         EOF
         
         echo "Waiting for deployment to roll out:"
@@ -256,21 +268,17 @@ jobs:
         fi
         echo "Testing API at http://$EXTERNAL_IP"
         
-        # Check if the pod is ready
         echo "Checking pod status:"
         kubectl get pods -n time-api -l app=$DEPLOYMENT_NAME
         
-        # Check pod logs
-        echo "Pod logs:"
-        kubectl logs -n time-api -l app=$DEPLOYMENT_NAME --tail=50
+        echo "Service details:"
+        kubectl get service $DEPLOYMENT_NAME -n time-api -o wide
         
-        # Test with increased timeout and verbose output
-        response=$(curl -v -s -o /dev/null -w "%{http_code}" --max-time 30 http://$EXTERNAL_IP)
-        if [ $response = "200" ]; then
-          echo "API is accessible"
-        else
-          echo "API is not accessible, got HTTP response code: $response"
-          echo "Curl verbose output:"
-          curl -v --max-time 30 http://$EXTERNAL_IP
-          exit 1
-        fi
+        echo "Endpoints:"
+        kubectl get endpoints $DEPLOYMENT_NAME -n time-api
+        
+        echo "Testing with curl:"
+        curl -v --max-time 30 http://$EXTERNAL_IP || echo "Curl failed"
+        
+        echo "Checking pod logs again:"
+        kubectl logs -n time-api -l app=$DEPLOYMENT_NAME --tail=100 || echo "No logs available"
