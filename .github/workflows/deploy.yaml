@@ -72,6 +72,7 @@ jobs:
     # Create GKE cluster
     - name: Create GKE cluster
       run: |
+        SERVICE_ACCOUNT="trf-gcp@afoke-shortletapp.iam.gserviceaccount.com"
         gcloud container clusters create ${{ env.GKE_CLUSTER }} \
           --zone ${{ env.GKE_ZONE }} \
           --num-nodes 1 \
@@ -85,7 +86,13 @@ jobs:
           --no-enable-master-authorized-networks \
           --addons HorizontalPodAutoscaling,HttpLoadBalancing \
           --enable-autoupgrade \
-          --enable-autorepair
+          --enable-autorepair \
+          --service-account="${SERVICE_ACCOUNT}"
+    # Verify the service account
+    - name: Verify service account
+      run: |
+        gcloud auth list
+        gcloud config get-value account
 
     # Wait for the cluster to be ready
     - name: Wait for cluster to be ready
