@@ -48,6 +48,21 @@ jobs:
         docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }}
 
+    # Enable necessary APIs
+    - name: Enable APIs
+      run: |
+        gcloud services enable container.googleapis.com
+
+    # Grant necessary roles to the service account
+    - name: Grant GKE and Compute roles
+      run: |
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
+          --role="roles/container.admin"
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
+          --role="roles/compute.viewer"
+
     # Get the GKE credentials so we can deploy to the cluster
     - name: Set up GKE credentials
       run: |
