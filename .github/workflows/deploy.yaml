@@ -1,285 +1,60 @@
-name: Build, Push, and Deploy to GKE
+name: Deploy to GKE using Terraform
 
 on:
   push:
     branches: [ main ]
 
 env:
-  GKE_CLUSTER: time-api-cluster
-  GKE_ZONE: us-central1
-  DEPLOYMENT_NAME: time-api
-  IMAGE: time-api
-  USE_GKE_GCLOUD_AUTH_PLUGIN: True
+  TF_VERSION: '1.0.0'
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  setup-build-publish-deploy:
-    name: Setup, Build, Publish, and Deploy
+  deploy:
+    name: Deploy to GKE
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v2
 
-    - name: Display Dockerfile and requirements.txt
-      run: |
-        echo "Dockerfile contents:"
-        cat ./api/Dockerfile
-        echo "requirements.txt contents:"
-        cat ./api/requirements.txt
-
-    # Setup gcloud CLI
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v1'
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
       with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+        terraform_version: ${{ env.TF_VERSION }}
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v1'
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: 'Use gcloud CLI'
-      run: 'gcloud info'
+    - name: Setup gcloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ env.GCP_PROJECT_ID }}
 
-    # Install gke-gcloud-auth-plugin
-    - name: Install gke-gcloud-auth-plugin
+    - name: Build and push Docker image
       run: |
-        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-        sudo apt-get update
-        sudo apt-get install google-cloud-sdk-gke-gcloud-auth-plugin
-        echo "export USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
+        docker build -t gcr.io/${{ env.GCP_PROJECT_ID }}/time-api:${{ github.sha }} ./api
+        gcloud auth configure-docker -q
+        docker push gcr.io/${{ env.GCP_PROJECT_ID }}/time-api:${{ github.sha }}
 
-    # Configure Docker to use the gcloud command-line tool as a credential helper
-    - name: Configure Docker
+    - name: Initialize Terraform
       run: |
-        gcloud --quiet auth configure-docker
+        cd terraform
+        terraform init
 
-    # Build the Docker image
-    - name: Build
+    - name: Terraform Plan
       run: |
-        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} ./api
+        cd terraform
+        terraform plan -var="project_id=${{ env.GCP_PROJECT_ID }}" -var="image_tag=${{ github.sha }}" -out=tfplan
 
-    # Push the Docker image to Docker Hub
-    - name: Push to Docker Hub
+    - name: Terraform Apply
       run: |
-        docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }}
+        cd terraform
+        terraform apply -auto-approve tfplan
 
-    # Enable necessary APIs
-    - name: Enable APIs
+    - name: Verify Deployment
       run: |
-        gcloud services enable container.googleapis.com || true
-        gcloud services list --enabled | grep container.googleapis.com || (echo "Failed to enable Kubernetes Engine API" && exit 1)
-
-    # Grant necessary roles to the service account
-    - name: Grant necessary roles
-      run: |
-        SERVICE_ACCOUNT="trf-gcp@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:${SERVICE_ACCOUNT}" \
-          --role="roles/container.admin"
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:${SERVICE_ACCOUNT}" \
-          --role="roles/compute.admin"
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:${SERVICE_ACCOUNT}" \
-          --role="roles/iam.serviceAccountUser"
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:${SERVICE_ACCOUNT}" \
-          --role="roles/serviceusage.serviceUsageAdmin"
-        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:${SERVICE_ACCOUNT}" \
-          --role="roles/compute.networkAdmin"
-    # Create VPC and Subnet if they don't exist
-    - name: Create VPC and Subnet
-      run: |
-        # Check if VPC exists, create if it doesn't
-        if ! gcloud compute networks describe time-api-vpc --project=${{ secrets.GCP_PROJECT_ID }} &>/dev/null; then
-          echo "Creating VPC: time-api-vpc"
-          gcloud compute networks create time-api-vpc --project=${{ secrets.GCP_PROJECT_ID }} --subnet-mode=custom
-        else
-          echo "VPC time-api-vpc already exists"
-        fi
-        
-        # Check if subnet exists, create if it doesn't
-        if ! gcloud compute networks subnets describe time-api-subnet --project=${{ secrets.GCP_PROJECT_ID }} --region=${{ env.GKE_ZONE }} &>/dev/null; then
-          echo "Creating Subnet: time-api-subnet"
-          gcloud compute networks subnets create time-api-subnet \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            --region=${{ env.GKE_ZONE }} \
-            --network=time-api-vpc \
-            --range=10.0.0.0/24
-        else
-          echo "Subnet time-api-subnet already exists"
-        fi
-    # Check if GKE cluster exists, create if it doesn't
-    - name: Check and Create GKE cluster
-      run: |
-        SERVICE_ACCOUNT="trf-gcp@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-        echo "Checking for existing GKE cluster: ${{ env.GKE_CLUSTER }}"
-        if gcloud container clusters describe ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }} --project ${{ secrets.GCP_PROJECT_ID }} &>/dev/null; then
-          echo "Cluster ${{ env.GKE_CLUSTER }} already exists"
-        else
-          echo "Creating GKE cluster with service account: ${SERVICE_ACCOUNT}"
-          gcloud container clusters create ${{ env.GKE_CLUSTER }} \
-            --project ${{ secrets.GCP_PROJECT_ID }} \
-            --zone ${{ env.GKE_ZONE }} \
-            --num-nodes 1 \
-            --machine-type e2-medium \
-            --network time-api-vpc \
-            --subnetwork time-api-subnet \
-            --enable-ip-alias \
-            --enable-autoscaling \
-            --min-nodes 1 \
-            --max-nodes 3 \
-            --no-enable-master-authorized-networks \
-            --addons HorizontalPodAutoscaling,HttpLoadBalancing \
-            --enable-autoupgrade \
-            --enable-autorepair \
-            --service-account="${SERVICE_ACCOUNT}" || (echo "Failed to create GKE cluster" && exit 1)
-        fi
-    # Verify the service account
-    - name: Verify service account
-      run: |
-        gcloud auth list
-        gcloud config get-value account
-
-    # Wait for the cluster to be ready
-    - name: Wait for cluster to be ready
-      run: |
-        echo "Waiting for cluster to be ready..."
-        while [[ $(gcloud container clusters list --filter="name=${{ env.GKE_CLUSTER }}" --format="value(status)") != "RUNNING" ]]; do
-          sleep 10
-        done
-        echo "Cluster is ready!"
-    # Get the GKE credentials so we can deploy to the cluster
-    - name: Set up GKE credentials
-      run: |
-        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
-        kubectl config view
-
-    # Create namespace if it doesn't exist
-    - name: Create namespace
-      run: |
-        kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
-
-    # Check current deployment configuration
-    - name: Check deployment configuration
-      run: |
-        echo "Current deployment configuration:"
-        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o yaml
-        
-        echo "Container names in deployment:"
-        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o jsonpath='{.spec.template.spec.containers[*].name}'
-    # Deploy the Docker image to the GKE cluster and create/update service
-    - name: Deploy and Expose
-      run: |
-        echo "Current context:"
-        kubectl config current-context
-        
-        echo "Checking if namespace exists:"
-        kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
-        
-        echo "Deploying/Updating deployment:"
-        cat <<EOF | kubectl apply -f -
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: $DEPLOYMENT_NAME
-          namespace: time-api
-        spec:
-          replicas: 1
-          selector:
-            matchLabels:
-              app: $DEPLOYMENT_NAME
-          template:
-            metadata:
-              labels:
-                app: $DEPLOYMENT_NAME
-            spec:
-              containers:
-              - name: $DEPLOYMENT_NAME
-                image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }}
-                ports:
-                - containerPort: 8080
-                readinessProbe:
-                  httpGet:
-                    path: /
-                    port: 8080
-                  initialDelaySeconds: 10
-                  periodSeconds: 5
-        EOF
-        
-        echo "Waiting for deployment to roll out:"
-        kubectl rollout status deployment/$DEPLOYMENT_NAME -n time-api --timeout=5m
-        
-        echo "Creating/Updating service:"
-        kubectl expose deployment $DEPLOYMENT_NAME --type=LoadBalancer --port=80 --target-port=8080 -n time-api --dry-run=client -o yaml | kubectl apply -f -
-        
-        echo "Waiting for service to get external IP:"
-        for i in {1..30}; do
-          EXTERNAL_IP=$(kubectl get service $DEPLOYMENT_NAME -n time-api --template="{{range .status.loadBalancer.ingress}}{{.ip}}{{end}}")
-          if [ -n "$EXTERNAL_IP" ]; then
-            echo "Service $DEPLOYMENT_NAME is now accessible at $EXTERNAL_IP"
-            break
-          fi
-          if [ $i -eq 30 ]; then
-            echo "Timeout waiting for external IP"
-            exit 1
-          fi
-          echo "Waiting for external IP... (Attempt $i/30)"
-          sleep 10
-        done
-        
-        echo "Deployment status:"
-        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o wide
-        
-        echo "Service status:"
-        kubectl get service $DEPLOYMENT_NAME -n time-api -o wide
-        
-        echo "Pod status:"
-        kubectl get pods -n time-api -l app=$DEPLOYMENT_NAME
-        
-        echo "Deployment logs:"
-        kubectl logs deployment/$DEPLOYMENT_NAME -n time-api --tail=50 || echo "No logs available yet"
-
-    # Verify updated deployment
-    - name: Verify updated deployment
-      run: |
-        echo "Updated deployment configuration:"
-        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o yaml
-        
-        echo "Deployment containers:"
-        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o jsonpath='{.spec.template.spec.containers[*].name}'
-    # Check service details
-    - name: Check service details
-      run: |
-        echo "Service details:"
-        kubectl get service $DEPLOYMENT_NAME -n time-api -o wide
-        echo "Endpoints:"
-        kubectl get endpoints $DEPLOYMENT_NAME -n time-api
-
-    # Test the deployed application
-    - name: Test API
-      run: |
-        EXTERNAL_IP=$(kubectl get service $DEPLOYMENT_NAME -n time-api --template="{{range .status.loadBalancer.ingress}}{{.ip}}{{end}}")
-        if [ -z "$EXTERNAL_IP" ]; then
-          echo "Failed to get external IP"
-          exit 1
-        fi
-        echo "Testing API at http://$EXTERNAL_IP"
-        
-        echo "Checking pod status:"
-        kubectl get pods -n time-api -l app=$DEPLOYMENT_NAME
-        
-        echo "Service details:"
-        kubectl get service $DEPLOYMENT_NAME -n time-api -o wide
-        
-        echo "Endpoints:"
-        kubectl get endpoints $DEPLOYMENT_NAME -n time-api
-        
-        echo "Testing with curl:"
-        curl -v --max-time 30 http://$EXTERNAL_IP || echo "Curl failed"
-        
-        echo "Checking pod logs again:"
-        kubectl logs -n time-api -l app=$DEPLOYMENT_NAME --tail=100 || echo "No logs available"
+        gcloud container clusters get-credentials your-cluster-name --zone your-zone --project ${{ env.GCP_PROJECT_ID }}
+        kubectl get services -n time-api
+        # Add commands to test your API endpoint

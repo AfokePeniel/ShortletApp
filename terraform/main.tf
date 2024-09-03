@@ -107,7 +107,6 @@ resource "google_container_cluster" "primary" {
     google_project_service.artifact_registry,
     google_project_service.container
   ]
-
 }
 
 resource "google_container_node_pool" "primary_nodes" {
@@ -159,7 +158,7 @@ resource "kubernetes_deployment" "time_api" {
 
       spec {
         container {
-          image = "gcr.io/${var.project_id}/time-api:latest"
+          image = "gcr.io/${var.project_id}/time-api:${var.image_tag}"
           name  = "time-api"
 
           port {
