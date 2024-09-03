@@ -172,7 +172,7 @@ jobs:
         kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
         
         echo "Deploying/Updating deployment:"
-        kubectl create deployment $DEPLOYMENT_NAME --image=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api --dry-run=client -o yaml | sed 's/- image/- name: ${{ env.DEPLOYMENT_NAME }}\n      image/' | kubectl apply -f -
+        kubectl create deployment $DEPLOYMENT_NAME --image=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api --dry-run=client -o yaml | sed 's/- image/- name: ${{ env.DEPLOYMENT_NAME }}\n        image/' | kubectl apply -f -
         
         echo "Updating deployment image:"
         kubectl set image deployment/$DEPLOYMENT_NAME $DEPLOYMENT_NAME=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api
