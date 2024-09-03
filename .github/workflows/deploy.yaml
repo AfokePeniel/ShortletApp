@@ -57,23 +57,41 @@ jobs:
     # Grant necessary roles to the service account
     - name: Grant necessary roles
       run: |
+        SERVICE_ACCOUNT="trf-gcp@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
         gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
+          --member="serviceAccount:${SERVICE_ACCOUNT}" \
           --role="roles/container.admin"
         gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
-          --role="roles/compute.viewer"
+          --member="serviceAccount:${SERVICE_ACCOUNT}" \
+          --role="roles/compute.admin"
         gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
+          --member="serviceAccount:${SERVICE_ACCOUNT}" \
+          --role="roles/iam.serviceAccountUser"
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member="serviceAccount:${SERVICE_ACCOUNT}" \
           --role="roles/serviceusage.serviceUsageAdmin"
         gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
-          --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
-          --role="roles/iam.serviceAccountUser"
+          --member="serviceAccount:${SERVICE_ACCOUNT}" \
+          --role="roles/compute.networkAdmin"
+    # Create VPC and Subnet
+    - name: Create VPC and Subnet
+      run: |
+        # Create VPC
+        gcloud compute networks create time-api-vpc --project=${{ secrets.GCP_PROJECT_ID }} --subnet-mode=custom
+
+        # Create Subnet
+        gcloud compute networks subnets create time-api-subnet \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --region=${{ env.GKE_ZONE }} \
+          --network=time-api-vpc \
+          --range=10.0.0.0/24
     # Create GKE cluster
     - name: Create GKE cluster
       run: |
-        SERVICE_ACCOUNT="trf-gcp@afoke-shortletapp.iam.gserviceaccount.com"
+        SERVICE_ACCOUNT="trf-gcp@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+        echo "Creating GKE cluster with service account: ${SERVICE_ACCOUNT}"
         gcloud container clusters create ${{ env.GKE_CLUSTER }} \
+          --project ${{ secrets.GCP_PROJECT_ID }} \
           --zone ${{ env.GKE_ZONE }} \
           --num-nodes 1 \
           --machine-type e2-medium \
@@ -87,7 +105,7 @@ jobs:
           --addons HorizontalPodAutoscaling,HttpLoadBalancing \
           --enable-autoupgrade \
           --enable-autorepair \
-          --service-account="${SERVICE_ACCOUNT}"
+          --service-account="${SERVICE_ACCOUNT}" || (echo "Failed to create GKE cluster" && exit 1)
     # Verify the service account
     - name: Verify service account
       run: |
