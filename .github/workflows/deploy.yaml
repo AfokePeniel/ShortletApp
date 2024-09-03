@@ -51,7 +51,8 @@ jobs:
     # Enable necessary APIs
     - name: Enable APIs
       run: |
-        gcloud services enable container.googleapis.com
+        gcloud services enable container.googleapis.com || true
+        gcloud services list --enabled | grep container.googleapis.com || (echo "Failed to enable Kubernetes Engine API" && exit 1)
 
     # Grant necessary roles to the service account
     - name: Grant GKE and Compute roles
@@ -62,6 +63,13 @@ jobs:
         gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
           --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
           --role="roles/compute.viewer"
+
+    # Grant Service Usage Admin role
+    - name: Grant Service Usage Admin role
+      run: |
+        gcloud projects add-iam-policy-binding ${{ secrets.GCP_PROJECT_ID }} \
+          --member="serviceAccount:trf-gcp@afoke-shortletapp.iam.gserviceaccount.com" \
+          --role="roles/serviceusage.serviceUsageAdmin"
 
     # Get the GKE credentials so we can deploy to the cluster
     - name: Set up GKE credentials
