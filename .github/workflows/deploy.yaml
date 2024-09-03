@@ -20,11 +20,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # Update Dockerfile
-    - name: Update Dockerfile
+    - name: Display Dockerfile and requirements.txt
       run: |
-        sed -i 's/FROM python:3.9/FROM python:3.9\nRUN pip install Flask==2.0.1 Werkzeug==2.0.1/' ./api/Dockerfile
+        echo "Dockerfile contents:"
         cat ./api/Dockerfile
+        echo "requirements.txt contents:"
+        cat ./api/requirements.txt
 
     # Setup gcloud CLI
     - id: 'auth'
