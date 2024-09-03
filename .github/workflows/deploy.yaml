@@ -28,11 +28,11 @@ jobs:
 
     - name: Build Docker image
       run: |
-        docker build -t $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA ./api
+        docker build -t $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:${{ github.sha }} ./api
 
     - name: Push Docker image to Docker Hub
       run: |
-        docker push $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA
+        docker push $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:${{ github.sha }}
 
     - name: Setup Google Cloud CLI
       uses: google-github-actions/setup-gcloud@v0.2.0
@@ -45,7 +45,7 @@ jobs:
 
     - name: Update Kubernetes deployment
       run: |
-        kubectl set image deployment/time-api time-api=$DOCKERHUB_USERNAME/$DOCKERHUB_REPO:$GITHUB_SHA -n time-api
+        kubectl set image deployment/time-api time-api=$DOCKERHUB_USERNAME/$DOCKERHUB_REPO:${{ github.sha }} -n time-api
         kubectl rollout status deployment/time-api -n time-api
 
     - name: Test API

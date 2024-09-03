@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: time-api
-        image: gcr.io/PROJECT_ID/time-api:latest
+        image: ${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:${TAG}
         ports:
         - containerPort: 8080
 ---
