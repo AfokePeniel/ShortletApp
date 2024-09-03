@@ -238,6 +238,14 @@ jobs:
         
         echo "Deployment containers:"
         kubectl get deployment $DEPLOYMENT_NAME -n time-api -o jsonpath='{.spec.template.spec.containers[*].name}'
+    # Check service details
+    - name: Check service details
+      run: |
+        echo "Service details:"
+        kubectl get service $DEPLOYMENT_NAME -n time-api -o wide
+        echo "Endpoints:"
+        kubectl get endpoints $DEPLOYMENT_NAME -n time-api
+
     # Test the deployed application
     - name: Test API
       run: |
@@ -247,10 +255,22 @@ jobs:
           exit 1
         fi
         echo "Testing API at http://$EXTERNAL_IP"
-        response=$(curl -s -o /dev/null -w "%{http_code}" http://$EXTERNAL_IP)
+        
+        # Check if the pod is ready
+        echo "Checking pod status:"
+        kubectl get pods -n time-api -l app=$DEPLOYMENT_NAME
+        
+        # Check pod logs
+        echo "Pod logs:"
+        kubectl logs -n time-api -l app=$DEPLOYMENT_NAME --tail=50
+        
+        # Test with increased timeout and verbose output
+        response=$(curl -v -s -o /dev/null -w "%{http_code}" --max-time 30 http://$EXTERNAL_IP)
         if [ $response = "200" ]; then
           echo "API is accessible"
         else
           echo "API is not accessible, got HTTP response code: $response"
+          echo "Curl verbose output:"
+          curl -v --max-time 30 http://$EXTERNAL_IP
           exit 1
         fi
