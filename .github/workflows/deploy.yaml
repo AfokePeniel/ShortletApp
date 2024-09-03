@@ -156,6 +156,12 @@ jobs:
       run: |
         kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
 
+    # Check current deployment configuration
+    - name: Check deployment configuration
+      run: |
+        echo "Current deployment configuration:"
+        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o yaml
+
     # Deploy the Docker image to the GKE cluster and create/update service
     - name: Deploy and Expose
       run: |
@@ -166,7 +172,7 @@ jobs:
         kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
         
         echo "Deploying/Updating deployment:"
-        kubectl create deployment $DEPLOYMENT_NAME --image=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api --dry-run=client -o yaml | kubectl apply -f -
+        kubectl create deployment $DEPLOYMENT_NAME --image=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api --dry-run=client -o yaml | sed 's/- image/- name: ${{ env.DEPLOYMENT_NAME }}\n      image/' | kubectl apply -f -
         
         echo "Updating deployment image:"
         kubectl set image deployment/$DEPLOYMENT_NAME $DEPLOYMENT_NAME=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api
@@ -203,6 +209,15 @@ jobs:
         
         echo "Deployment logs:"
         kubectl logs deployment/$DEPLOYMENT_NAME -n time-api --tail=50 || echo "No logs available yet"
+
+    # Verify updated deployment
+    - name: Verify updated deployment
+      run: |
+        echo "Updated deployment configuration:"
+        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o yaml
+        
+        echo "Deployment containers:"
+        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o jsonpath='{.spec.template.spec.containers[*].name}'
 
     # Test the deployed application
     - name: Test API
