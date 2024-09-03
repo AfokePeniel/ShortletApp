@@ -161,7 +161,9 @@ jobs:
       run: |
         echo "Current deployment configuration:"
         kubectl get deployment $DEPLOYMENT_NAME -n time-api -o yaml
-
+        
+        echo "Container names in deployment:"
+        kubectl get deployment $DEPLOYMENT_NAME -n time-api -o jsonpath='{.spec.template.spec.containers[*].name}'
     # Deploy the Docker image to the GKE cluster and create/update service
     - name: Deploy and Expose
       run: |
@@ -172,10 +174,28 @@ jobs:
         kubectl create namespace time-api --dry-run=client -o yaml | kubectl apply -f -
         
         echo "Deploying/Updating deployment:"
-        kubectl create deployment $DEPLOYMENT_NAME --image=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api --dry-run=client -o yaml | sed 's/- image/- name: ${{ env.DEPLOYMENT_NAME }}\n        image/' | kubectl apply -f -
-        
-        echo "Updating deployment image:"
-        kubectl set image deployment/$DEPLOYMENT_NAME $DEPLOYMENT_NAME=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }} -n time-api
+        cat <<EOF | kubectl apply -f -
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: $DEPLOYMENT_NAME
+          namespace: time-api
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: $DEPLOYMENT_NAME
+          template:
+            metadata:
+              labels:
+                app: $DEPLOYMENT_NAME
+            spec:
+              containers:
+              - name: $DEPLOYMENT_NAME
+                image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.sha }}
+                ports:
+                - containerPort: 8080
+        EOF
         
         echo "Waiting for deployment to roll out:"
         kubectl rollout status deployment/$DEPLOYMENT_NAME -n time-api --timeout=5m
@@ -218,7 +238,6 @@ jobs:
         
         echo "Deployment containers:"
         kubectl get deployment $DEPLOYMENT_NAME -n time-api -o jsonpath='{.spec.template.spec.containers[*].name}'
-
     # Test the deployed application
     - name: Test API
       run: |
