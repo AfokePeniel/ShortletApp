@@ -60,6 +60,7 @@ resource "google_container_node_pool" "primary_nodes" {
     metadata = {
       disable-legacy-endpoints = "true"
     }
+    disk_size_gb = 100  # Adjust this value to be less than 500
   }
 }
 
