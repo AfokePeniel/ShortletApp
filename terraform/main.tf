@@ -6,39 +6,39 @@ resource "google_project_service" "apis" {
   disable_on_destroy = false
 }
 
-# VPC Network
-resource "google_compute_network" "vpc" {
-  name                    = "time-api-vpc"
-  auto_create_subnetworks = false
-  project                 = var.project_id
+# Use data source for existing VPC
+data "google_compute_network" "vpc" {
+  name    = "time-api-vpc"
+  project = var.project_id
 }
 
-# Subnet
-resource "google_compute_subnetwork" "subnet" {
-  name          = "time-api-subnet"
-  ip_cidr_range = "10.0.0.0/24"
-  region        = var.region
-  network       = google_compute_network.vpc.id
-  private_ip_google_access = true
+# Use data source for existing subnet (if it exists)
+data "google_compute_subnetwork" "subnet" {
+  name    = "time-api-subnet"
+  region  = var.region
+  project = var.project_id
 }
 
-# Firewall rule to allow internal communication
+# Firewall rule (create if not exists)
 resource "google_compute_firewall" "allow_internal" {
   name    = "allow-internal"
-  network = google_compute_network.vpc.name
+  network = data.google_compute_network.vpc.name
+  project = var.project_id
+
   allow {
     protocol = "tcp"
     ports    = ["0-65535"]
   }
-  source_ranges = ["10.0.0.0/24"]
+  source_ranges = [data.google_compute_subnetwork.subnet.ip_cidr_range]
 }
 
 # GKE Cluster
 resource "google_container_cluster" "primary" {
   name     = "time-api-cluster"
   location = var.region
-  network  = google_compute_network.vpc.name
-  subnetwork = google_compute_subnetwork.subnet.name
+  network  = data.google_compute_network.vpc.name
+  subnetwork = data.google_compute_subnetwork.subnet.name
+  project    = var.project_id
 
   initial_node_count       = 1
   remove_default_node_pool = true
@@ -50,8 +50,6 @@ resource "google_container_cluster" "primary" {
   }
 
   ip_allocation_policy {}
-
-  depends_on = [google_project_service.apis]
 }
 
 resource "google_container_node_pool" "primary_nodes" {
