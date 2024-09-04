@@ -47,12 +47,6 @@ jobs:
         cd terraform
         terraform init
 
-    - name: Import existing resources
-      run: |
-        cd terraform
-        terraform import google_compute_network.vpc projects/${{ secrets.GCP_PROJECT_ID }}/global/networks/***-vpc
-      continue-on-error: true
-
     - name: Terraform Plan
       env:
         TF_VAR_gcp_credentials: ${{ secrets.GCP_SA_KEY }}
@@ -61,11 +55,18 @@ jobs:
         terraform plan -var "project_id=$PROJECT_ID" -var "api_image=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
 
     - name: Terraform Apply
+      id: apply
       env:
         TF_VAR_gcp_credentials: ${{ secrets.GCP_SA_KEY }}
       run: |
         cd terraform
         terraform apply -auto-approve -var "project_id=$PROJECT_ID" -var "api_image=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
+
+    - name: Check Apply Outcome
+      if: steps.apply.outcome == 'failure'
+      run: |
+        echo "Terraform apply failed"
+        exit 1
 
     - name: Terraform Destroy on Failure
       if: failure()

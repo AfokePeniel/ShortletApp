@@ -1,11 +1,7 @@
 # VPC
-resource "google_compute_network" "vpc" {
-  name                    = "***-vpc"
-  auto_create_subnetworks = false
-
-  lifecycle {
-    prevent_destroy = true
-  }
+data "google_compute_network" "vpc" {
+  name    = "***-vpc"
+  project = var.project_id
 }
 
 # Subnet
