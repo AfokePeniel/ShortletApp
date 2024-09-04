@@ -20,6 +20,13 @@ data "google_compute_subnetwork" "subnet" {
 }
 
 # Firewall rule (create if not exists)
+data "google_compute_firewall" "allow_internal" {
+  name    = "allow-internal"
+  project = var.project_id
+}
+
+# If you need to make changes to the existing firewall rule, you can use this resource
+# but with the 'create_before_destroy' lifecycle rule
 resource "google_compute_firewall" "allow_internal" {
   name    = "allow-internal"
   network = data.google_compute_network.vpc.name
@@ -30,6 +37,10 @@ resource "google_compute_firewall" "allow_internal" {
     ports    = ["0-65535"]
   }
   source_ranges = [data.google_compute_subnetwork.subnet.ip_cidr_range]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # GKE Cluster
@@ -50,6 +61,8 @@ resource "google_container_cluster" "primary" {
   }
 
   ip_allocation_policy {}
+
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_container_node_pool" "primary_nodes" {
