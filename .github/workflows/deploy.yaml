@@ -46,11 +46,15 @@ jobs:
         terraform init
 
     - name: Terraform Plan
+      env:
+        TF_VAR_gcp_credentials: ${{ secrets.GCP_SA_KEY }}
       run: |
         cd terraform
         terraform plan -var "project_id=$PROJECT_ID" -var "api_image=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"
 
     - name: Terraform Apply
+      env:
+        TF_VAR_gcp_credentials: ${{ secrets.GCP_SA_KEY }}
       run: |
         cd terraform
         terraform apply -auto-approve -var "project_id=$PROJECT_ID" -var "api_image=gcr.io/$PROJECT_ID/$IMAGE:$GITHUB_SHA"

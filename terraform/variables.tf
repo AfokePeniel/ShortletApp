@@ -15,3 +15,9 @@ variable "gke_num_nodes" {
 variable "api_image" {
   description = "Docker image for the API"
 }
+
+variable "gcp_credentials" {
+  type        = string
+  description = "GCP credentials"
+  sensitive   = true
+}
