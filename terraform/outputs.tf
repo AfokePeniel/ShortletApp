@@ -1,34 +1,29 @@
+output "region" {
+  value       = var.region
+  description = "GCloud Region"
+}
+
 output "project_id" {
-  description = "GCloud Project ID"
   value       = var.project_id
+  description = "GCloud Project ID"
 }
 
 output "kubernetes_cluster_name" {
-  description = "GKE Cluster Name"
   value       = google_container_cluster.primary.name
+  description = "GKE Cluster Name"
 }
 
 output "kubernetes_cluster_host" {
-  description = "GKE Cluster Host"
   value       = google_container_cluster.primary.endpoint
+  description = "GKE Cluster Host"
 }
 
-output "vpc_name" {
-  description = "The name of the VPC being created"
-  value       = data.google_compute_network.vpc.name
+output "load_balancer_ip" {
+  value       = kubernetes_service.api.status.0.load_balancer.0.ingress.0.ip
+  description = "IP address of the load balancer for the API service"
 }
 
-output "subnet_name" {
-  description = "The name of the subnet being created"
-  value       = data.google_compute_subnetwork.subnet.name
-}
-
-output "region" {
-  description = "The region in which the cluster resides"
-  value       = var.region
-}
-
-output "location" {
-  description = "The location in which the cluster resides"
-  value       = google_container_cluster.primary.location
+output "api_url" {
+  value       = "http://${kubernetes_service.api.status.0.load_balancer.0.ingress.0.ip}/time"
+  description = "URL to access the API"
 }

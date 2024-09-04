@@ -3,13 +3,10 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-@app.route('/')
-def get_current_time():
-    return jsonify({'current_time': datetime.now().isoformat()})
-
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'healthy'}), 200
+@app.route('/time', methods=['GET'])
+def get_time():
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return jsonify({"current_time": current_time})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)

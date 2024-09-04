@@ -1,20 +1,17 @@
 variable "project_id" {
   description = "GCP Project ID"
-  type        = string
 }
 
 variable "region" {
   description = "GCP region"
-  type        = string
   default     = "us-central1"
 }
 
-variable "terraform_service_account" {
-  description = "The service account email used by Terraform"
-  type        = string
+variable "gke_num_nodes" {
+  default     = 2
+  description = "Number of GKE nodes"
 }
 
-variable "image_tag" {
-  description = "Tag for the time-api Docker image"
-  type        = string
+variable "api_image" {
+  description = "Docker image for the API"
 }

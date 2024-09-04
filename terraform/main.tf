@@ -1,103 +1,120 @@
-# Enable required APIs
-resource "google_project_service" "apis" {
-  count   = 3
+provider "google" {
   project = var.project_id
-  service = ["artifactregistry.googleapis.com", "container.googleapis.com", "compute.googleapis.com"][count.index]
-  disable_on_destroy = false
-}
-
-# Use data source for existing VPC
-data "google_compute_network" "vpc" {
-  name    = "time-api-vpc"
-  project = var.project_id
-}
-
-# Use data source for existing subnet (if it exists)
-data "google_compute_subnetwork" "subnet" {
-  name    = "time-api-subnet"
   region  = var.region
-  project = var.project_id
 }
 
-# Firewall rule
-resource "google_compute_firewall" "allow_internal" {
-  name    = "allow-internal"
-  network = data.google_compute_network.vpc.name
-  project = var.project_id
+# VPC
+resource "google_compute_network" "vpc" {
+  name                    = "${var.project_id}-vpc"
+  auto_create_subnetworks = false
+}
 
-  allow {
-    protocol = "tcp"
-    ports    = ["0-65535"]
-  }
-  source_ranges = [data.google_compute_subnetwork.subnet.ip_cidr_range]
+# Subnet
+resource "google_compute_subnetwork" "subnet" {
+  name          = "${var.project_id}-subnet"
+  region        = var.region
+  network       = google_compute_network.vpc.name
+  ip_cidr_range = "10.0.0.0/24"
+}
+
+# NAT Gateway
+resource "google_compute_router" "router" {
+  name    = "${var.project_id}-router"
+  region  = var.region
+  network = google_compute_network.vpc.name
+}
+
+resource "google_compute_router_nat" "nat" {
+  name                               = "${var.project_id}-nat"
+  router                             = google_compute_router.router.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
 # GKE Cluster
 resource "google_container_cluster" "primary" {
-  name     = "time-api-cluster"
+  name     = "${var.project_id}-gke"
   location = var.region
-  project  = var.project_id
 
-  network    = data.google_compute_network.vpc.name
-  subnetwork = data.google_compute_subnetwork.subnet.name
-
-  # Add other configuration as needed, matching the existing cluster
-  initial_node_count       = 1
   remove_default_node_pool = true
+  initial_node_count       = 1
 
-  private_cluster_config {
-    enable_private_nodes    = true
-    enable_private_endpoint = false
-    master_ipv4_cidr_block  = "172.16.0.0/28"
-  }
-
-  ip_allocation_policy {}
+  network    = google_compute_network.vpc.name
+  subnetwork = google_compute_subnetwork.subnet.name
 }
 
-# Node Pool
 resource "google_container_node_pool" "primary_nodes" {
-  name       = "time-api-node-pool"
+  name       = "${google_container_cluster.primary.name}-node-pool"
   location   = var.region
   cluster    = google_container_cluster.primary.name
-  node_count = 1
+  node_count = var.gke_num_nodes
 
   node_config {
-    preemptible  = true
-    machine_type = "e2-small"
-    oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring",
+    ]
+
+    labels = {
+      env = var.project_id
+    }
+
+    machine_type = "n1-standard-1"
+    tags         = ["gke-node", "${var.project_id}-gke"]
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
   }
+}
+
+# Firewall rules
+resource "google_compute_firewall" "allow_http" {
+  name    = "allow-http"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["80", "8080"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
 }
 
 # Kubernetes resources
-resource "kubernetes_namespace" "time_api" {
+resource "kubernetes_namespace" "api" {
   metadata {
-    name = "time-api"
+    name = "api"
   }
 }
 
-resource "kubernetes_deployment" "time_api" {
+resource "kubernetes_deployment" "api" {
   metadata {
-    name      = "time-api"
-    namespace = kubernetes_namespace.time_api.metadata[0].name
+    name      = "api"
+    namespace = kubernetes_namespace.api.metadata[0].name
   }
 
   spec {
     replicas = 2
+
     selector {
       match_labels = {
-        app = "time-api"
+        app = "api"
       }
     }
+
     template {
       metadata {
         labels = {
-          app = "time-api"
+          app = "api"
         }
       }
+
       spec {
         container {
-          image = "gcr.io/${var.project_id}/time-api:${var.image_tag}"
-          name  = "time-api"
+          image = var.api_image
+          name  = "api"
+
           port {
             container_port = 8080
           }
@@ -107,19 +124,22 @@ resource "kubernetes_deployment" "time_api" {
   }
 }
 
-resource "kubernetes_service" "time_api" {
+resource "kubernetes_service" "api" {
   metadata {
-    name      = "time-api-service"
-    namespace = kubernetes_namespace.time_api.metadata[0].name
+    name      = "api"
+    namespace = kubernetes_namespace.api.metadata[0].name
   }
+
   spec {
     selector = {
-      app = kubernetes_deployment.time_api.spec.0.template.0.metadata[0].labels.app
+      app = kubernetes_deployment.api.spec[0].template[0].metadata[0].labels.app
     }
+
     port {
       port        = 80
       target_port = 8080
     }
+
     type = "LoadBalancer"
   }
 }
