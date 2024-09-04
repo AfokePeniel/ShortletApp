@@ -8,7 +8,7 @@ resource "google_project_service" "apis" {
 
 # VPC Network
 resource "google_compute_network" "vpc" {
-  name                    = "time-api-vpc"
+  name                    = "time-api-vpc-new"  # Changed the name here
   auto_create_subnetworks = false
   project                 = var.project_id
 }
