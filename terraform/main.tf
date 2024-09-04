@@ -19,49 +19,24 @@ data "google_compute_subnetwork" "subnet" {
   project = var.project_id
 }
 
-# Firewall rule (update if exists, create if not)
-resource "google_compute_firewall" "allow_internal" {
+# Use data source for existing firewall rule
+data "google_compute_firewall" "allow_internal" {
   name    = "allow-internal"
-  network = data.google_compute_network.vpc.name
   project = var.project_id
-
-  allow {
-    protocol = "tcp"
-    ports    = ["0-65535"]
-  }
-  source_ranges = [data.google_compute_subnetwork.subnet.ip_cidr_range]
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
-# GKE Cluster
-resource "google_container_cluster" "primary" {
+# Use data source for existing GKE cluster
+data "google_container_cluster" "primary" {
   name     = "time-api-cluster"
   location = var.region
-  network  = data.google_compute_network.vpc.name
-  subnetwork = data.google_compute_subnetwork.subnet.name
-  project    = var.project_id
-
-  initial_node_count       = 1
-  remove_default_node_pool = true
-
-  private_cluster_config {
-    enable_private_nodes    = true
-    enable_private_endpoint = false
-    master_ipv4_cidr_block  = "172.16.0.0/28"
-  }
-
-  ip_allocation_policy {}
-
-  depends_on = [google_project_service.apis]
+  project  = var.project_id
 }
 
+# Keep the node pool as a resource
 resource "google_container_node_pool" "primary_nodes" {
   name       = "time-api-node-pool"
   location   = var.region
-  cluster    = google_container_cluster.primary.name
+  cluster    = data.google_container_cluster.primary.name
   node_count = 1
 
   node_config {
