@@ -7,9 +7,10 @@ resource "google_project_service" "apis" {
 }
 
 # VPC Network
-data "google_compute_network" "vpc" {
-  name = "time-api-vpc"
-  project = var.project_id
+resource "google_compute_network" "vpc" {
+  name                    = "time-api-vpc"
+  auto_create_subnetworks = false
+  project                 = var.project_id
 }
 
 # Subnet
@@ -17,7 +18,7 @@ resource "google_compute_subnetwork" "subnet" {
   name          = "time-api-subnet"
   ip_cidr_range = "10.0.0.0/24"
   region        = var.region
-  network       = data.google_compute_network.vpc.id
+  network       = google_compute_network.vpc.id
   private_ip_google_access = true
 }
 

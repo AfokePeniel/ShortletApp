@@ -47,7 +47,7 @@ jobs:
       run: |
         cd terraform
         terraform init
-        terraform import data.google_compute_network.vpc projects/${{ secrets.GCP_PROJECT_ID }}/global/networks/time-api-vpc
+        terraform import google_compute_network.vpc projects/${{ secrets.GCP_PROJECT_ID }}/global/networks/time-api-vpc
 
     - name: Terraform Plan
       run: |
