@@ -19,14 +19,7 @@ data "google_compute_subnetwork" "subnet" {
   project = var.project_id
 }
 
-# Firewall rule (create if not exists)
-data "google_compute_firewall" "allow_internal" {
-  name    = "allow-internal"
-  project = var.project_id
-}
-
-# If you need to make changes to the existing firewall rule, you can use this resource
-# but with the 'create_before_destroy' lifecycle rule
+# Firewall rule (update if exists, create if not)
 resource "google_compute_firewall" "allow_internal" {
   name    = "allow-internal"
   network = data.google_compute_network.vpc.name
