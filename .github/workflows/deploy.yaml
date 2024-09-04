@@ -3,6 +3,8 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -63,3 +65,33 @@ jobs:
       run: |
         EXTERNAL_IP=$(kubectl get service api -n api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         curl -f http://$EXTERNAL_IP/time || exit 1
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Plan
+      run: terraform plan -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -var="api_image=gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-image:${{ github.sha }}" -out=tfplan
+      continue-on-error: true
+
+    - name: Terraform Apply
+      id: apply
+      run: terraform apply -auto-approve tfplan
+      continue-on-error: true
+
+    - name: Terraform Destroy on Failure
+      if: steps.apply.outcome == 'failure'
+      run: |
+        echo "Apply failed, destroying resources..."
+        terraform destroy -auto-approve -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -var="api_image=gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-image:${{ github.sha }}"
+
+    - name: Check Apply Outcome
+      if: steps.apply.outcome == 'failure'
+      run: exit 1
