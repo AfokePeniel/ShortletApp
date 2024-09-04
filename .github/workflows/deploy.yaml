@@ -38,16 +38,10 @@ jobs:
         gcloud auth configure-docker -q
         docker push gcr.io/${{ env.GCP_PROJECT_ID }}/time-api:${{ github.sha }}
 
-    - name: Initialize Terraform
+    - name: Terraform Init
       run: |
         cd terraform
         terraform init
-
-    - name: Import existing VPC
-      run: |
-        cd terraform
-        terraform init
-        terraform import google_compute_network.vpc projects/${{ secrets.GCP_PROJECT_ID }}/global/networks/time-api-vpc
 
     - name: Terraform Plan
       run: |
