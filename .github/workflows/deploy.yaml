@@ -75,20 +75,27 @@ jobs:
       uses: hashicorp/setup-terraform@v1
 
     - name: Terraform Init
-      run: terraform init
+      run: |
+        cd terraform  # Change this to the directory containing your .tf files
+        terraform init
 
     - name: Terraform Plan
-      run: terraform plan -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -var="api_image=gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-image:${{ github.sha }}" -out=tfplan
+      run: |
+        cd terraform  # Change this to the directory containing your .tf files
+        terraform plan -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -var="api_image=gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-image:${{ github.sha }}" -out=tfplan
       continue-on-error: true
 
     - name: Terraform Apply
       id: apply
-      run: terraform apply -auto-approve tfplan
+      run: |
+        cd terraform  # Change this to the directory containing your .tf files
+        terraform apply -auto-approve tfplan
       continue-on-error: true
 
     - name: Terraform Destroy on Failure
       if: steps.apply.outcome == 'failure'
       run: |
+        cd terraform  # Change this to the directory containing your .tf files
         echo "Apply failed, destroying resources..."
         terraform destroy -auto-approve -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -var="api_image=gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-image:${{ github.sha }}"
 

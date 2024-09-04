@@ -1,5 +1,6 @@
 variable "project_id" {
-  description = "GCP Project ID"
+  description = "The GCP Project ID"
+  type        = string
 }
 
 variable "region" {
@@ -13,7 +14,8 @@ variable "gke_num_nodes" {
 }
 
 variable "api_image" {
-  description = "Docker image for the API"
+  description = "The Docker image for the API"
+  type        = string
 }
 
 variable "gcp_credentials" {
