@@ -8,14 +8,14 @@ resource "google_project_service" "apis" {
 
 # VPC Network
 resource "google_compute_network" "vpc" {
-  name                    = "time-api-vpc-new"  # Changed the name here
+  name                    = "time-api-vpc-new2"
   auto_create_subnetworks = false
   project                 = var.project_id
 }
 
 # Subnet
 resource "google_compute_subnetwork" "subnet" {
-  name          = "time-api-subnet-new"  # Changed the name here
+  name          = "time-api-subnet-new2"
   ip_cidr_range = "10.0.0.0/24"
   region        = var.region
   network       = google_compute_network.vpc.id
@@ -24,7 +24,7 @@ resource "google_compute_subnetwork" "subnet" {
 
 # Firewall rule to allow internal communication
 resource "google_compute_firewall" "allow_internal" {
-  name    = "allow-internal-new"  # Changed the name here as well
+  name    = "allow-internal-new2"
   network = google_compute_network.vpc.name
   allow {
     protocol = "tcp"
@@ -35,7 +35,7 @@ resource "google_compute_firewall" "allow_internal" {
 
 # GKE Cluster
 resource "google_container_cluster" "primary" {
-  name     = "time-api-cluster-new"  # Changed the name here
+  name     = "time-api-cluster-new2"
   location = var.region
   network  = google_compute_network.vpc.name
   subnetwork = google_compute_subnetwork.subnet.name
